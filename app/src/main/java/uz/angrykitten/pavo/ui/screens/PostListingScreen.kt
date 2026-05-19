@@ -72,13 +72,14 @@ fun PostListingScreen(viewModel: AppViewModel, navController: NavController) {
     var price by remember { mutableStateOf("") }
     var currency by remember { mutableStateOf("USD") }
     var phone by remember { mutableStateOf("") }
-    var whatsapp by remember { mutableStateOf("") }
+    var telegram by remember { mutableStateOf("") }
     var stepError by remember { mutableStateOf<String?>(null) }
 
     val uploadedImages = remember { mutableStateListOf<String>() }
     var isUploading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val cities = viewModel.getCities()
+    // Collect reactively — updates automatically when Supabase data loads
+    val cities by viewModel.cityList.collectAsStateWithLifecycle()
 
     LaunchedEffect(userPhone) {
         if (phone.isBlank() && !userPhone.isNullOrBlank()) {
@@ -94,18 +95,31 @@ fun PostListingScreen(viewModel: AppViewModel, navController: NavController) {
         tr("Ko'rib chiqish", "Review", "Проверка")
     )
 
+    // Pre-read localised strings so non-composable lambdas (onClick, onFailure, canProceed) can use them
+    val errBreed        = tr("Zotini kiriting", "Enter breed", "Введите породу")
+    val errAge          = tr("Yoshini kiriting", "Enter age", "Введите возраст")
+    val errCity         = tr("Shaharni tanlang", "Select a city", "Выберите город")
+    val errPrice        = tr("Narxni kiriting", "Enter price", "Введите цену")
+    val errPhone        = tr("Telefon raqamni kiriting", "Enter phone number", "Введите номер телефона")
+    val errImageUpload  = tr("Rasm yuklashda xatolik", "Image upload failed", "Ошибка загрузки фото")
+    val labelDog        = tr("It", "Dog", "Собака")
+    val labelCat        = tr("Mushuk", "Cat", "Кошка")
+    val labelSheep      = tr("Qo'y", "Sheep", "Овца")
+    val labelCow        = tr("Sigir", "Cow", "Корова")
+    val labelHorse      = tr("Ot", "Horse", "Лошадь")
+    val labelAnimal     = tr("Hayvon", "Animal", "Животное")
+
     fun canProceed(): Pair<Boolean, String?> = when (currentStep) {
         1 -> when {
-            breed.isBlank() -> false to tr("Zotini kiriting", "Enter breed", "Введите породу")
-            ageMonths.isBlank() -> false to tr("Yoshini kiriting", "Enter age", "Введите возраст")
-            else -> true to null
+            breed.isBlank()     -> false to errBreed
+            ageMonths.isBlank() -> false to errAge
+            else                -> true to null
         }
-        2 -> if (selectedCityId != null) true to null
-             else false to tr("Shaharni tanlang", "Select a city", "Выберите город")
+        2 -> if (selectedCityId != null) true to null else false to errCity
         3 -> when {
-            listingType != "adoption" && price.isBlank() -> false to tr("Narxni kiriting", "Enter price", "Введите цену")
-            phone.isBlank() -> false to tr("Telefon raqamni kiriting", "Enter phone number", "Введите номер телефона")
-            else -> true to null
+            listingType != "adoption" && price.isBlank() -> false to errPrice
+            phone.isBlank() -> false to errPhone
+            else            -> true to null
         }
         else -> true to null
     }
@@ -179,8 +193,9 @@ fun PostListingScreen(viewModel: AppViewModel, navController: NavController) {
                             isUploading = true
                             viewModel.uploadImage(uri).onSuccess { url ->
                                 uploadedImages.add(url)
-                            }.onFailure {
-                                stepError = tr("Rasm yuklashda xatolik", "Image upload failed", "Ошибка загрузки фото")
+                            }.onFailure { err ->
+                                // Show the actual error (includes bucket/policy hints)
+                                stepError = err.message ?: errImageUpload
                             }
                             isUploading = false
                         }
@@ -197,10 +212,10 @@ fun PostListingScreen(viewModel: AppViewModel, navController: NavController) {
                     onAddress = { address = it }
                 )
                 3 -> AnimalPriceContactStep(
-                    price = price, currency = currency, phone = phone, whatsapp = whatsapp,
+                    price = price, currency = currency, phone = phone, telegram = telegram,
                     listingType = listingType,
                     onPrice = { price = it }, onCurrency = { currency = it },
-                    onPhone = { phone = it }, onWhatsapp = { whatsapp = it }
+                    onPhone = { phone = it }, onTelegram = { telegram = it }
                 )
                 4 -> AnimalReviewStep(
                     listingType = listingType, animalType = animalType,
@@ -253,12 +268,12 @@ fun PostListingScreen(viewModel: AppViewModel, navController: NavController) {
                         } else {
                             val autoTitle = title.ifBlank {
                                 val typeLabel = when (animalType) {
-                                    "dog" -> tr("It", "Dog", "Собака")
-                                    "cat" -> tr("Mushuk", "Cat", "Кошка")
-                                    "sheep" -> tr("Qo'y", "Sheep", "Овца")
-                                    "cow" -> tr("Sigir", "Cow", "Корова")
-                                    "horse" -> tr("Ot", "Horse", "Лошадь")
-                                    else -> tr("Hayvon", "Animal", "Животное")
+                                    "dog"   -> labelDog
+                                    "cat"   -> labelCat
+                                    "sheep" -> labelSheep
+                                    "cow"   -> labelCow
+                                    "horse" -> labelHorse
+                                    else    -> labelAnimal
                                 }
                                 "$typeLabel — $breed"
                             }
@@ -288,7 +303,7 @@ fun PostListingScreen(viewModel: AppViewModel, navController: NavController) {
                                 else uploadedImages.toList(),
                                 seller_name = userName ?: "Foydalanuvchi",
                                 seller_phone = if (phone.isNotBlank()) "+998$phone" else "",
-                                seller_whatsapp = if (whatsapp.isNotBlank()) whatsapp else "",
+                                seller_telegram = if (telegram.isNotBlank()) telegram.removePrefix("@") else "",
                                 seller_avatar = "",
                                 vaccination_status = vaccinationStatus.ifBlank { null },
                                 has_pedigree = hasPedigree
@@ -522,7 +537,8 @@ fun AnimalLocationStep(
     onDistrictSelected: (Int, String) -> Unit,
     onAddress: (String) -> Unit
 ) {
-    val districts = remember(selectedCityId) { viewModel.getDistricts(selectedCityId) }
+    // Re-read when city changes OR when the cities list itself updates (data loaded from Supabase)
+    val districts = remember(selectedCityId, cities) { viewModel.getDistricts(selectedCityId) }
     var cityExpanded by remember { mutableStateOf(false) }
     var districtExpanded by remember { mutableStateOf(false) }
 
@@ -582,10 +598,10 @@ fun AnimalLocationStep(
 
 @Composable
 fun AnimalPriceContactStep(
-    price: String, currency: String, phone: String, whatsapp: String,
+    price: String, currency: String, phone: String, telegram: String,
     listingType: String,
     onPrice: (String) -> Unit, onCurrency: (String) -> Unit,
-    onPhone: (String) -> Unit, onWhatsapp: (String) -> Unit
+    onPhone: (String) -> Unit, onTelegram: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(tr("Narx va aloqa", "Price & contact", "Цена и контакты"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
@@ -621,7 +637,22 @@ fun AnimalPriceContactStep(
 
         Text(tr("Aloqa ma'lumotlari", "Contact details", "Контактные данные"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         PhoneFieldUz(tr("Telefon raqam *", "Phone number *", "Телефон *"), phone, onPhone)
-        PostFormField(tr("WhatsApp raqami", "WhatsApp number", "Номер WhatsApp"), whatsapp, onWhatsapp, KeyboardType.Phone)
+        OutlinedTextField(
+            value = telegram,
+            onValueChange = { input ->
+                // Strip leading @ so we store just the username
+                onTelegram(input.removePrefix("@").filter { it.isLetterOrDigit() || it == '_' })
+            },
+            label = { Text(tr("Telegram foydalanuvchi nomi", "Telegram username", "Имя пользователя Telegram")) },
+            placeholder = { Text("username") },
+            prefix = { Text("@", fontWeight = FontWeight.Bold) },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, focusedLabelColor = Brand),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+            singleLine = true,
+            supportingText = { Text(tr("Ixtiyoriy — xabar yozish uchun", "Optional — for direct messaging", "Необязательно — для личных сообщений"), style = MaterialTheme.typography.labelSmall) }
+        )
     }
 }
 
@@ -710,6 +741,33 @@ fun AnimalReviewStep(
                 }
             }
         }
+    }
+}
+
+// ── ReviewIconRow (used in AnimalReviewStep) ─────────────────────────────────
+
+@Composable
+fun ReviewIconRow(icon: ImageVector, label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Icon(icon, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 

@@ -79,7 +79,7 @@ fun SellerProfileScreen(
 
     val sellerName = seller?.seller_name ?: "Foydalanuvchi"
     val sellerPhone = seller?.seller_phone.orEmpty()
-    val sellerWhatsapp = seller?.seller_whatsapp.orEmpty()
+    val sellerTelegram = seller?.seller_telegram.orEmpty()
 
     val currentUserId by viewModel.userId.collectAsStateWithLifecycle()
     val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
@@ -113,7 +113,7 @@ fun SellerProfileScreen(
                 SellerHeroCard(
                     sellerName = sellerName,
                     sellerPhone = sellerPhone,
-                    sellerWhatsapp = sellerWhatsapp,
+                    sellerTelegram = sellerTelegram,
                     listingCount = sellerAnimals.size,
                     canMessage = isLoggedIn && currentUserId != null && currentUserId != sellerId && sellerId.isNotBlank(),
                     onOpenChat = {
@@ -186,7 +186,7 @@ fun SellerProfileScreen(
 private fun SellerHeroCard(
     sellerName: String,
     sellerPhone: String,
-    sellerWhatsapp: String,
+    sellerTelegram: String,
     listingCount: Int,
     canMessage: Boolean,
     onOpenChat: () -> Unit
@@ -232,8 +232,8 @@ private fun SellerHeroCard(
                     }
                 }
 
-                if (sellerWhatsapp.isNotBlank()) {
-                    SellerInfoPill(Icons.Default.Send, sellerWhatsapp, Modifier.fillMaxWidth())
+                if (sellerTelegram.isNotBlank()) {
+                    SellerInfoPill(Icons.Default.Send, "@$sellerTelegram", Modifier.fillMaxWidth())
                 }
 
                 if (canMessage) {

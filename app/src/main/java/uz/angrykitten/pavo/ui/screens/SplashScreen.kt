@@ -5,7 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import kotlinx.coroutines.delay
+import uz.angrykitten.pavo.ui.localization.LocalAppLanguage
+import uz.angrykitten.pavo.ui.localization.AppLanguage
 import uz.angrykitten.pavo.ui.navigation.Screen
 import uz.angrykitten.pavo.ui.theme.Brand
 import uz.angrykitten.pavo.ui.viewmodel.AppViewModel
@@ -60,7 +62,7 @@ fun SplashScreen(viewModel: AppViewModel, navController: NavController) {
                     .background(Brand),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Home, null, tint = Color.White, modifier = Modifier.size(48.dp))
+                Icon(Icons.Default.Pets, null, tint = Color.White, modifier = Modifier.size(48.dp))
             }
             Spacer(Modifier.height(20.dp))
             Text(
@@ -72,7 +74,11 @@ fun SplashScreen(viewModel: AppViewModel, navController: NavController) {
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "Ko'chmas mulk bozori",
+                when (LocalAppLanguage.current) {
+                    AppLanguage.EN -> "Animal Marketplace"
+                    AppLanguage.RU -> "Рынок животных"
+                    else -> "Hayvonlar bozori"
+                },
                 fontSize = 14.sp,
                 color = Color.White.copy(alpha = 0.5f),
                 textAlign = TextAlign.Center

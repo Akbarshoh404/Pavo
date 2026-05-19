@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import uz.angrykitten.pavo.data.model.Animal
@@ -83,6 +84,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // ─── Saved animals ────────────────────────────────────────────────────
     val savedIds: StateFlow<Set<String>> = userRepo.savedPropertyIds
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    // ─── Remote loading state ────────────────────────────────────────────────
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing
+
+    private val _refreshError = MutableStateFlow<String?>(null)
+    val refreshError: StateFlow<String?> = _refreshError
+
+    // ─── Reactive city / district lists (update whenever remote data loads) ──
+    val cityList: StateFlow<List<City>> = dataVersion.map {
+        animalRepo.getCities()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // ─── Filter state ────────────────────────────────────────────────────────
     private val _filterState = MutableStateFlow(FilterState())
@@ -349,7 +362,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // ─── Local Persistence ───────────────────────────────────────────────────
 
     private suspend fun persistUserLocally(uid: String, name: String, email: String, avatar: String) {
-        userRepo.saveUser(uid, name, email, avatar)
+        userRepo.signIn(uid, name, email, avatar)
     }
 
     private fun syncUserToSupabase(
@@ -376,15 +389,39 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshRemoteContent() {
         viewModelScope.launch {
-            animalRepo.refreshFromSupabase()
+            _isRefreshing.value = true
+            _refreshError.value = null
+            val result = animalRepo.refreshFromSupabase(force = true)
+            result.onFailure { e ->
+                _refreshError.value = e.message ?: "Ma'lumotlarni yuklashda xatolik"
+            }
+            dataVersion.value += 1
+            _isRefreshing.value = false
+        }
+    }
+
+    fun clearRefreshError() { _refreshError.value = null }
+
+    fun toggleSaved(animalId: String) {
+        viewModelScope.launch {
+            userRepo.toggleSaved(animalId)
             dataVersion.value += 1
         }
     }
 
-    fun toggleSaved(animalId: String) {
+    fun updateUserName(name: String) {
+        viewModelScope.launch { userRepo.updateName(name) }
+    }
+
+    fun updateUserPhone(phone: String) {
+        viewModelScope.launch { userRepo.updatePhone(phone) }
+    }
+
+    fun deleteAccount(onComplete: () -> Unit) {
         viewModelScope.launch {
-            userRepo.toggleSavedProperty(animalId)
-            dataVersion.value += 1
+            authRepo.signOut()
+            userRepo.signOut()
+            onComplete()
         }
     }
 

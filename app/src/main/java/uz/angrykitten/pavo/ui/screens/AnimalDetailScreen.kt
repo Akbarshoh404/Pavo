@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -88,6 +89,8 @@ fun AnimalDetailScreen(
     val context = LocalContext.current
     val savedIds by viewModel.savedIds.collectAsStateWithLifecycle()
     val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
+    val currentUserId by viewModel.userId.collectAsStateWithLifecycle()
+    val currentUserName by viewModel.userName.collectAsStateWithLifecycle()
 
     val animal = remember(animalId) { viewModel.animalRepo.getAnimalById(animalId) }
     if (animal == null) {
@@ -343,8 +346,14 @@ fun AnimalDetailScreen(
 
             item {
                 DetailSectionCard {
+                    // ── Seller info row — tappable to view their profile ──────
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable {
+                                navController.navigate(Screen.SellerProfile.createRoute(animal.user_id))
+                            },
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
@@ -363,13 +372,14 @@ fun AnimalDetailScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = tr("Sotuvchi", "Seller", "Продавец"),
+                                text = tr("Profilni ko'rish", "View profile", "Смотреть профиль"),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
                     Spacer(modifier = Modifier.height(20.dp))
+                    // ── Call + Telegram row ───────────────────────────────────
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -389,20 +399,62 @@ fun AnimalDetailScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(tr("Qo'ng'iroq", "Call", "Позвонить"), fontWeight = FontWeight.Bold)
                         }
-                        OutlinedButton(
+                        if (animal.seller_telegram.isNotBlank()) {
+                            OutlinedButton(
+                                onClick = {
+                                    val username = animal.seller_telegram.removePrefix("@")
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/$username"))
+                                    context.startActivity(intent)
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(56.dp),
+                                shape = RoundedCornerShape(18.dp),
+                                border = ButtonDefaults.outlinedButtonBorder.copy(width = 2.dp)
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Telegram", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                    // ── Chat in app button ────────────────────────────────────
+                    if (isLoggedIn && currentUserId != null && currentUserId != animal.user_id) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        val myId = currentUserId!!
+                        val myName = currentUserName ?: tr("Men", "Me", "Я")
+                        val chatId = listOf(myId, animal.user_id).sorted().joinToString("_")
+                        Button(
                             onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/${animal.seller_whatsapp}"))
-                                context.startActivity(intent)
+                                navController.navigate(
+                                    Screen.ChatDetail.createRoute(chatId, animal.user_id, animal.seller_name)
+                                )
                             },
                             modifier = Modifier
-                                .weight(1f)
+                                .fillMaxWidth()
                                 .height(56.dp),
                             shape = RoundedCornerShape(18.dp),
-                            border = ButtonDefaults.outlinedButtonBorder.copy(width = 2.dp)
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
                         ) {
                             Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("WhatsApp", fontWeight = FontWeight.Bold)
+                            Text(tr("Ilova ichida yozish", "Chat in app", "Написать в приложении"), fontWeight = FontWeight.Bold)
+                        }
+                    } else if (!isLoggedIn) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedButton(
+                            onClick = { navController.navigate(Screen.Login.route) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            shape = RoundedCornerShape(18.dp)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(tr("Yozish uchun kiring", "Sign in to chat", "Войдите, чтобы написать"), fontWeight = FontWeight.Bold)
                         }
                     }
                 }

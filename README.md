@@ -1,174 +1,188 @@
-# Uybek
+# Pavo
 
-Uybek is an Android real-estate app for the Uzbekistan market, built with Jetpack Compose, Firebase, and Supabase. The app already supports browsing listings, search, favorites, seller profiles, posting, chat, authentication, settings, FAQ, and privacy screens.
+Pavo is an Android marketplace app for animal listings in Uzbekistan. It is built with Kotlin, Jetpack Compose, Firebase, and Supabase, and supports browsing, search, favorites, posting listings, seller profiles, authentication, and in-app chat.
 
-## Current stack
+## Features
 
-- Kotlin + Jetpack Compose + Material 3
-- Firebase Auth for email, phone OTP, and Google sign-in
+- Browse active animal listings from the home feed
+- Search and filter by listing type, animal type, city, price, and text query
+- View detailed listing pages with seller information
+- Save favorite listings locally
+- Post new listings with image upload to Supabase Storage
+- Open seller profiles and start direct chats
+- Sign in with email/password, Google, or phone OTP
+- Manage profile basics, app theme, and language
+- Use the app in Uzbek, English, or Russian
+
+## Tech stack
+
+- Kotlin 2.0
+- Jetpack Compose + Material 3
+- Android Navigation Compose
+- MVVM with a shared `AppViewModel`
+- Firebase Authentication
 - Firebase Realtime Database for chat
-- Supabase for property and user data
-- MVVM with a single `AppViewModel`
-
-## Main screens
-
-- Home feed with filters and listing cards
-- Search with filter bottom sheet
-- Property detail
-- Seller profile
-- Chat list and chat detail
-- Post listing flow
-- Saved listings
-- Profile and settings
-- Login and register
-- FAQ and privacy policy
-
-## UI direction in this version
-
-This version uses a rounded-card visual system across the app:
-
-- Consistent border radius on cards, fields, buttons, dialogs, and hero sections
-- Unified listing cards across home, saved, search, and seller profile
-- Cleaner dark-theme color handling for prices and important accents
-- Seller profile listings now use the same presentation style as the main feed
-- Home no longer exposes the cramped 3-column card layout
-- Property detail no longer shows the share icon
+- Supabase PostgREST for listing and user data
+- Supabase Storage for uploaded images
+- Android DataStore for local user session and saved items
+- Coil for image loading
 
 ## Project structure
 
 ```text
-app/src/main/java/uz/angrykitten/uybek/
-  MainActivity.kt
-  data/
-    model/
-    repository/
-  ui/
-    components/
-    navigation/
-    screens/
-    theme/
-    viewmodel/
+app/
+  src/main/
+    java/uz/angrykitten/pavo/
+      MainActivity.kt
+      data/
+        model/
+        repository/
+        SupabaseClient.kt
+      ui/
+        components/
+        localization/
+        navigation/
+        screens/
+        theme/
+        viewmodel/
+    assets/
+    res/
+supabase/
+  seed_sample_data.sql
+  cities_rows.csv
+  districts_rows.csv
+  properties_rows.csv
+play-store-assets/
+tools/
 ```
 
-## Running the app
+## Main screens
 
-### Requirements
+- Splash
+- Home
+- Search
+- Animal detail
+- Seller profile
+- Post listing
+- Saved listings
+- My listings
+- Chat list and chat detail
+- Login and register
+- Settings
+- FAQ and privacy policy
+
+## Requirements
 
 - Android Studio
-- JDK 11+
-- Firebase project with Auth and Realtime Database
-- Supabase project with the required tables
+- JDK 11
+- Android SDK 36
+- A Firebase project
+- A Supabase project
 
-### Local setup
+## Setup
 
-Add values to `local.properties`:
+### 1. Firebase
+
+Place your Firebase config file here:
+
+```text
+app/google-services.json
+```
+
+Enable these Firebase products:
+
+- Authentication
+- Realtime Database
+
+If you plan to use Google sign-in, also add your web client id to `local.properties`:
 
 ```properties
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-anon-key
 GOOGLE_WEB_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
 ```
 
-Place `google-services.json` inside `app/`.
+If you plan to use phone OTP in Uzbekistan, make sure the SMS region policy in Firebase Auth allows `+998`.
 
-### Build
+### 2. Supabase
 
-```bash
-./gradlew assembleDebug
+Update [SupabaseClient.kt](D:/Projects/Mobile%20Development/Pavo/Uybek-Mobile/app/src/main/java/uz/angrykitten/pavo/data/SupabaseClient.kt) with your project values:
+
+```kotlin
+supabaseUrl = "https://your-project.supabase.co"
+supabaseKey = "your-anon-key"
 ```
 
-## Data notes
+The app expects these Supabase resources:
 
-- Listings can be loaded from Supabase.
-- The repository still falls back to `app/src/main/assets/sample_data.json` when remote loading fails.
-- New listings are inserted locally first and then synced to Supabase.
+- `cities` table
+- `districts` table
+- `animals` table
+- `users` table
+- `Animals` storage bucket
 
-## What still needs to be done for a full production version
+The repository already includes helper data under [supabase](D:/Projects/Mobile%20Development/Pavo/Uybek-Mobile/supabase) that you can use while setting up seed data.
 
-This section is based on the current codebase, not generic advice.
+### 3. Local properties
 
-### 1. Listing management must be completed
+Your `local.properties` should at least point to your Android SDK. If using Google sign-in, also add:
 
-- `MyListingsScreen` still shows a `Tahrirlash` button without an implemented edit flow.
-- `PostListingScreen` currently posts a hardcoded placeholder image URL instead of real uploaded media.
-- Listing creation needs real image upload, validation feedback, progress states, and edit/update support.
+```properties
+GOOGLE_WEB_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
+```
 
-### 2. Backend consistency needs hardening
+## Build and run
 
-- The app still relies on `sample_data.json` as a fallback source.
-- Property refresh is mostly pull-based and local-state-driven, not fully reactive to backend updates.
-- Delete and write flows need clearer success/error reporting and stronger sync conflict handling.
+Debug build:
 
-### 3. Account lifecycle is not fully complete yet
+```powershell
+.\gradlew.bat assembleDebug
+```
 
-- `deleteAccount()` currently signs the user out locally but does not show a full backend cleanup flow.
-- User profile editing is limited to name and phone.
-- A full version should add avatar updates, account recovery, session management, and server-side delete handling.
+Install on a connected device or emulator:
 
-### 4. Trust and moderation features are still missing
+```powershell
+.\gradlew.bat installDebug
+```
 
-- No reporting flow for fake or abusive listings
-- No listing moderation queue or admin review tools
-- No verified-agent or verified-owner states
-- No fraud-prevention signals, audit logs, or abuse limits
+Run unit tests:
 
-### 5. Search and discovery can be much stronger
+```powershell
+.\gradlew.bat testDebugUnitTest
+```
 
-- Search is still mainly local text matching plus basic filters.
-- A full version should add district/city drill-down, sorting, map search, nearby search, recent searches, and recommendation logic.
-- Home should eventually support promoted inventory, editorial collections, and personalization.
+## Data model overview
 
-### 6. Real media and listing quality systems are needed
+Listings are represented by the `Animal` model and include:
 
-- No gallery upload pipeline
-- No image compression/cropping flow
-- No cover-photo selection
-- No listing completeness score
-- No mandatory moderation around photo quality or duplicate detection
+- listing type such as sale, adoption, or stud
+- animal type such as dog, cat, sheep, cow, horse, or other
+- breed, age, weight, and vaccination metadata
+- city, district, and address fields
+- price and currency
+- seller profile information
+- a list of image URLs
 
-### 7. Chat is functional but still basic
+## Notes about the current implementation
 
-- No unread counts
-- No delivery/read states
-- No attachments, image sharing, or voice notes
-- No blocking/reporting tools inside chat
-- No push notifications for new messages
+- User session state and saved listing ids are persisted with DataStore
+- Chats use Firebase Realtime Database directly from the UI layer
+- Listings and user profiles are loaded from Supabase
+- Listing image upload goes to the Supabase Storage bucket named `Animals`
+- App language and theme selection are currently handled in-app; the codebase supports Uzbek, English, and Russian
 
-### 8. Product polish and reliability need another pass
+## Useful paths
 
-- Some screens are still feature-complete visually but not functionally complete.
-- Empty, error, loading, and offline states should be standardized across every data-driven screen.
-- Theme preference is currently local to the running app session and should be persisted explicitly.
-
-### 9. Legal and operational readiness is not finished
-
-- Privacy and FAQ pages exist in-app, but production release needs final legal copy and public URLs.
-- Support, contact, and escalation flows should be real and connected to operations.
-- Analytics, crash reporting, release monitoring, and backup/recovery processes need to be added.
-
-### 10. Business features for a real marketplace are still missing
-
-- Paid promotions or featured listings
-- Agent/business accounts
-- Lead tracking and seller analytics
-- Saved search alerts
-- Notification campaigns
-- Admin dashboards and content operations
-
-## Recommended next implementation order
-
-1. Real media upload for listings
-2. Edit listing flow
-3. Proper backend-backed account deletion
-4. Notifications and unread chat states
-5. Map search and better discovery
-6. Moderation/reporting tools
-7. Analytics, crash reporting, and release hardening
+- App entry point: [MainActivity.kt](D:/Projects/Mobile%20Development/Pavo/Uybek-Mobile/app/src/main/java/uz/angrykitten/pavo/MainActivity.kt)
+- Navigation graph: [AppNavGraph.kt](D:/Projects/Mobile%20Development/Pavo/Uybek-Mobile/app/src/main/java/uz/angrykitten/pavo/ui/navigation/AppNavGraph.kt)
+- Shared view model: [AppViewModel.kt](D:/Projects/Mobile%20Development/Pavo/Uybek-Mobile/app/src/main/java/uz/angrykitten/pavo/ui/viewmodel/AppViewModel.kt)
+- Listing repository: [AnimalRepository.kt](D:/Projects/Mobile%20Development/Pavo/Uybek-Mobile/app/src/main/java/uz/angrykitten/pavo/data/repository/AnimalRepository.kt)
+- Auth repository: [AuthRepository.kt](D:/Projects/Mobile%20Development/Pavo/Uybek-Mobile/app/src/main/java/uz/angrykitten/pavo/data/repository/AuthRepository.kt)
 
 ## Verification
 
-Latest verified local build:
+Latest local verification completed with:
 
-```bash
-./gradlew assembleDebug
+```powershell
+.\gradlew.bat assembleDebug
 ```
+
+The debug build succeeded after fixing the launcher resource XML files.

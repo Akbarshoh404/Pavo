@@ -15,14 +15,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -52,8 +56,25 @@ fun HomeScreen(viewModel: AppViewModel, navController: NavController) {
     val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
     val userName by viewModel.userName.collectAsStateWithLifecycle()
     val filterState by viewModel.filterState.collectAsStateWithLifecycle()
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
+    val refreshError by viewModel.refreshError.collectAsStateWithLifecycle()
     var columns by rememberSaveable { mutableIntStateOf(1) }
     val layoutColumns = if (columns == 1) 1 else 2
+    val snackbarHostState = remember { SnackbarHostState() }
+    val retryActionLabel = tr("Qayta", "Retry", "Повтор")
+
+    // Show snackbar when data load fails
+    LaunchedEffect(refreshError) {
+        if (!refreshError.isNullOrBlank()) {
+            val result = snackbarHostState.showSnackbar(
+                message = refreshError!!,
+                actionLabel = retryActionLabel,
+                duration = SnackbarDuration.Long
+            )
+            if (result == SnackbarResult.ActionPerformed) viewModel.refreshRemoteContent()
+            viewModel.clearRefreshError()
+        }
+    }
 
     val listingFilters = listOf(
         null to tr("Barchasi", "All", "Все"),
@@ -62,10 +83,35 @@ fun HomeScreen(viewModel: AppViewModel, navController: NavController) {
         "stud" to tr("Juftlash", "Stud", "Вязка")
     )
 
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { scaffoldPadding ->
+
+    // Full-screen progress while initial load
+    if (isRefreshing && animals.isEmpty()) {
+        Box(
+            Modifier.fillMaxSize().padding(scaffoldPadding),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(color = Brand)
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    tr("Ma'lumotlar yuklanmoqda…", "Loading data…", "Загрузка данных…"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        return@Scaffold
+    }
+
     LazyVerticalGrid(
         columns = GridCells.Fixed(layoutColumns),
         modifier = Modifier
             .fillMaxSize()
+            .padding(scaffoldPadding)
             .background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -92,7 +138,7 @@ fun HomeScreen(viewModel: AppViewModel, navController: NavController) {
                     )
                 }
                 FilledIconButton(
-                    onClick = {},
+                    onClick = { navController.navigate(Screen.Chat.route) { launchSingleTop = true } },
                     colors = IconButtonDefaults.filledIconButtonColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
                         contentColor = MaterialTheme.colorScheme.primary
@@ -222,9 +268,9 @@ fun HomeScreen(viewModel: AppViewModel, navController: NavController) {
             }
         }
 
-        if (animals.isEmpty()) {
+        if (animals.isEmpty() && !isRefreshing) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                EmptyHomeState()
+                EmptyHomeState(onRetry = { viewModel.refreshRemoteContent() })
             }
         } else {
             items(animals, key = { it.id }) { animal ->
@@ -256,11 +302,12 @@ fun HomeScreen(viewModel: AppViewModel, navController: NavController) {
                 }
             }
         }
-    }
+    } // end LazyVerticalGrid
+    } // end Scaffold
 }
 
 @Composable
-private fun EmptyHomeState() {
+private fun EmptyHomeState(onRetry: () -> Unit = {}) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -272,7 +319,7 @@ private fun EmptyHomeState() {
             color = MaterialTheme.colorScheme.surfaceVariant
         ) {
             Icon(
-                Icons.Default.SearchOff,
+                Icons.Default.WifiOff,
                 contentDescription = null,
                 modifier = Modifier.padding(24.dp).size(36.dp),
                 tint = MaterialTheme.colorScheme.primary
@@ -280,17 +327,32 @@ private fun EmptyHomeState() {
         }
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            tr("E'lonlar topilmadi", "No listings found", "Объявления не найдены"),
+            tr("Ma'lumotlar yuklanmadi", "No data loaded", "Данные не загружены"),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            tr("Boshqa filtrlarni sinab ko'ring", "Try different filters", "Попробуйте другие фильтры"),
+            tr(
+                "Internet aloqasini tekshirib, qayta urinib ko'ring",
+                "Check your internet connection and try again",
+                "Проверьте подключение к интернету и повторите попытку"
+            ),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 32.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
+        Spacer(modifier = Modifier.height(20.dp))
+        Button(
+            onClick = onRetry,
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(tr("Qayta yuklash", "Reload", "Перезагрузить"))
+        }
     }
 }
 

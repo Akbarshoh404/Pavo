@@ -42,7 +42,7 @@ data class Animal(
     val images: List<String>,
     val seller_name: String,
     val seller_phone: String,
-    val seller_whatsapp: String,
+    val seller_telegram: String,
     val seller_avatar: String,
     val vaccination_status: String? = null,
     val has_pedigree: Boolean = false

@@ -30,6 +30,7 @@ import androidx.credentials.exceptions.GetCredentialException
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.launch
 import uz.angrykitten.pavo.BuildConfig
@@ -529,11 +530,17 @@ private suspend fun performGoogleSignIn(
 ) {
     val webClientId = resolveGoogleWebClientId(context)
     if (webClientId == null) {
-        snackbar.showSnackbar("Google kirish: Firebase Console'dan Web Client ID ni local.properties ga GOOGLE_WEB_CLIENT_ID=... qilib qo'shing.")
+        snackbar.showSnackbar(
+            "Google kirish sozlanmagan. Firebase Console → Authentication → Google → Web Client ID ni " +
+            "local.properties ga GOOGLE_WEB_CLIENT_ID=... qilib qo'shing."
+        )
         return
     }
+
     val credentialManager = CredentialManager.create(context)
-    val request = GetCredentialRequest.Builder()
+
+    // Step 1: Try One-Tap (GetGoogleIdOption). Works great for returning users.
+    val oneTapRequest = GetCredentialRequest.Builder()
         .addCredentialOption(
             GetGoogleIdOption.Builder()
                 .setFilterByAuthorizedAccounts(false)
@@ -541,33 +548,66 @@ private suspend fun performGoogleSignIn(
                 .setAutoSelectEnabled(false)
                 .build()
         ).build()
-    try {
-        val result = credentialManager.getCredential(request = request, context = activity)
-        val credential = result.credential
-        if (credential !is CustomCredential ||
-            credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
-        ) {
+
+    val credentialResult = try {
+        credentialManager.getCredential(request = oneTapRequest, context = activity)
+    } catch (e: GetCredentialException) {
+        val isNoCredential = e.javaClass.simpleName.contains("NoCredential", ignoreCase = true) ||
+            e.message?.contains("No credentials available", ignoreCase = true) == true ||
+            e.message?.contains("no credential", ignoreCase = true) == true
+
+        if (!isNoCredential) {
+            // User cancelled or a hard error — bail out
+            if (e.message?.contains("Cancel", ignoreCase = true) == true ||
+                e.message?.contains("interrupt", ignoreCase = true) == true) return
+            snackbar.showSnackbar("Google kirish xatosi: ${e.message?.take(80)}")
+            return
+        }
+
+        // Step 2: Fall back to the full Google Sign-In bottom sheet
+        try {
+            val fallbackRequest = GetCredentialRequest.Builder()
+                .addCredentialOption(
+                    GetSignInWithGoogleOption.Builder(webClientId).build()
+                ).build()
+            credentialManager.getCredential(request = fallbackRequest, context = activity)
+        } catch (fe: GetCredentialException) {
+            if (fe.message?.contains("Cancel", ignoreCase = true) == true ||
+                fe.message?.contains("interrupt", ignoreCase = true) == true) return
+            snackbar.showSnackbar("Google kirish xatosi: ${fe.message?.take(80)}")
+            return
+        } catch (fe: Exception) {
+            snackbar.showSnackbar("Xatolik: ${fe.message?.take(80)}")
+            return
+        }
+    } catch (e: Exception) {
+        snackbar.showSnackbar("Xatolik: ${e.message?.take(80)}")
+        return
+    }
+
+    // Extract the ID token from whichever flow succeeded
+    val credential = credentialResult.credential
+    val idToken = when {
+        credential is CustomCredential &&
+        credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL -> {
+            try {
+                GoogleIdTokenCredential.createFrom(credential.data).idToken
+            } catch (e: Exception) {
+                snackbar.showSnackbar("Google token noto'g'ri: ${e.message?.take(60)}")
+                return
+            }
+        }
+        else -> {
             snackbar.showSnackbar("Google kirish uchun yaroqli credential olinmadi.")
             return
         }
-        val idToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
-        viewModel.signInWithGoogle(idToken,
-            onSuccess = { navController.navigate(Screen.Home.route) { popUpTo(0) { inclusive = true } } },
-            onError = {}
-        )
-    } catch (e: GetCredentialException) {
-        val msg = when {
-            e.javaClass.simpleName == "NoCredentialException" ||
-                e.message?.contains("No credentials available") == true ->
-                "Google akkaunt topilmadi. Qurilmangizda Google akkaunt qo'shing."
-            e.message?.contains("Cancel", ignoreCase = true) == true ->
-                "Google kirish bekor qilindi."
-            else -> "Google kirish xatosi: ${e.message?.take(60)}"
-        }
-        snackbar.showSnackbar(msg)
-    } catch (e: Exception) {
-        snackbar.showSnackbar("Xatolik: ${e.message?.take(80)}")
     }
+
+    viewModel.signInWithGoogle(
+        idToken = idToken,
+        onSuccess = { navController.navigate(Screen.Home.route) { popUpTo(0) { inclusive = true } } },
+        onError = { msg -> /* error is already shown via authState.error → LaunchedEffect snackbar */ }
+    )
 }
 
 private fun resolveGoogleWebClientId(context: android.content.Context): String? {

@@ -18,11 +18,11 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import uz.angrykitten.pavo.ui.localization.AppLanguage
 import uz.angrykitten.pavo.ui.localization.tr
@@ -47,7 +47,9 @@ fun AppNavGraph(
         Screen.Search.route,
         Screen.PostListing.route,
         Screen.Saved.route,
-        Screen.Profile.route
+        Screen.Profile.route,
+        Screen.Chat.route,
+        Screen.ChatDetail.route
     )
     val showBottomBar = currentDestination?.route in bottomNavRoutes
 
@@ -158,7 +160,11 @@ fun MinimalistNavigationBar(
                         .clip(RoundedCornerShape(12.dp))
                         .clickable {
                             navController.navigate(item.screen.route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                // Use Home route (not findStartDestination) because Splash
+                                // removes itself from the back stack at launch, making
+                                // findStartDestination point to an entry that no longer exists
+                                // — this caused every tab press to push onto the stack.
+                                popUpTo(Screen.Home.route) { saveState = true }
                                 launchSingleTop = true
                                 restoreState = true
                             }
@@ -205,11 +211,13 @@ fun MinimalistNavigationBar(
                     }
                     Text(
                         text = bottomNavLabel(item.screen),
-                        fontSize = 10.sp,
+                        fontSize = 9.5.sp,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                         color = if (selected) navSelected else MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
-                        maxLines = 1
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false
                     )
                 }
             }
